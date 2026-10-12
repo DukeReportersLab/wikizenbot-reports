@@ -1,0 +1,65 @@
+name: Daily WikiZenBot report
+
+# GitHub cron is UTC-only, so we fire at 13:30, 14:30 and 15:30 UTC and let the
+# guard step below run only the first one at or after 9:00 America/New_York
+# that hasn't already produced today's report. That gives 9:30 local in both
+# EDT and EST, and the later slots act as automatic retries if a run fails.
+on:
+  schedule:
+    - cron: "30 13 * * *"
+    - cron: "30 14 * * *"
+    - cron: "30 15 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Decide whether to run
+        id: guard
+        run: |
+          DATE="$(TZ=America/New_York date +%Y-%m-%d)"
+          HOUR="$(TZ=America/New_York date +%-H)"
+          echo "date=$DATE" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$HOUR" -lt 9 ]; then
+            echo "Too early in New York ($HOUR:xx); skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          elif [ -f "docs/reports/$DATE.md" ]; then
+            echo "Report for $DATE already published; skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.guard.outputs.run == 'true'
+        with:
+          python-version: "3.13"
+
+      - name: Run WikiZenBot agent
+        if: steps.guard.outputs.run == 'true'
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WIKIZENBOT_CONTACT: ${{ secrets.WIKIZENBOT_CONTACT }}
+        run: python3 bot/wikizenbot_agent.py --out "$RUNNER_TEMP/report.md"
+
+      - name: Publish to Pages
+        if: steps.guard.outputs.run == 'true'
+        env:
+          WIKIZENBOT_PAGES_REPO: ${{ github.workspace }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          python3 bot/publish_to_pages.py "$RUNNER_TEMP/report.md" "${{ steps.guard.outputs.date }}"
