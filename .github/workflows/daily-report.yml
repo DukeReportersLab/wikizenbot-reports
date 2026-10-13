@@ -4,12 +4,19 @@ name: Daily WikiZenBot report
 # guard step below run only the first one at or after 9:00 America/New_York
 # that hasn't already produced today's report. That gives 9:30 local in both
 # EDT and EST, and the later slots act as automatic retries if a run fails.
+# GitHub sometimes drops scheduled runs entirely, so a Mac launchd job
+# (~/wikizenbot/nudge.sh) also dispatches this with force=false as a backstop.
 on:
   schedule:
     - cron: "30 13 * * *"
     - cron: "30 14 * * *"
     - cron: "30 15 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Run even if today's report already exists"
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -31,7 +38,7 @@ jobs:
           DATE="$(TZ=America/New_York date +%Y-%m-%d)"
           HOUR="$(TZ=America/New_York date +%-H)"
           echo "date=$DATE" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force }}" = "true" ]; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           elif [ "$HOUR" -lt 9 ]; then
             echo "Too early in New York ($HOUR:xx); skipping."
