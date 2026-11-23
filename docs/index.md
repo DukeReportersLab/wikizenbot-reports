@@ -11,6 +11,7 @@ Daily scan of Village Pump, admin noticeboards, open RfCs, and AfD logs, ranked 
 
 ## Reports
 
+- [2026-11-23](reports/2026-11-23.html)
 - [2026-11-22](reports/2026-11-22.html)
 - [2026-11-21](reports/2026-11-21.html)
 - [2026-11-20](reports/2026-11-20.html)
